@@ -1,0 +1,84 @@
+"""
+
+A small Test application to show how to use Flask-MQTT.
+
+"""
+
+
+import json
+from flask import Flask, render_template
+from flask_mqtt import Mqtt
+
+
+
+app = Flask(__name__)
+app.config['TEMPLATES_AUTO_RELOAD'] = True
+app.config['MQTT_BROKER_URL'] = '192.168.1.240'
+app.config['MQTT_BROKER_PORT'] = 1883
+app.config['MQTT_KEEPALIVE'] = 5
+app.config['MQTT_TLS_ENABLED'] = False
+
+# Parameters for SSL enabled
+# app.config['MQTT_BROKER_PORT'] = 8883
+# app.config['MQTT_TLS_ENABLED'] = True
+# app.config['MQTT_TLS_INSECURE'] = True
+# app.config['MQTT_TLS_CA_CERTS'] = 'ca.crt'
+
+mqtt = Mqtt(app)
+data=dict()
+
+@app.route('/')
+def index():
+    return "Valid paths are 'DoorStatus' 'DistanceRange' and 'ToggleDoor'"
+
+
+@app.route('/DoorStatus')
+def doorState():
+    return data['doorStatus']
+
+@app.route('/DistanceRange')
+def ledState():
+    print(data["ledStatus"])
+    return data["ledStatus"]
+
+@app.route('/ToggleDoor')
+def DoorToggle():
+    mqtt.publish('doorControl', 'toggle')
+    returnString =""
+    if data['doorStatus'] == "open":
+        mqtt.publish('doorStatus', 'closed')
+        returnString= "Door closed"
+    elif data['doorStatus'] == "closed":
+        mqtt.publish('doorStatus', 'open')
+        returnString= "Door opened"
+    return returnString
+
+@app.route('/printDict')
+def PrintDict():
+    for x, y in data.items():
+        print(x, y)
+    return "bleh"
+
+@mqtt.on_connect()
+def handle_connect(client, userdata, flags, rc):
+    mqtt.subscribe('doorStatus')
+    mqtt.subscribe('ledStatus')
+
+@mqtt.on_message()
+def handle_mqtt_message(client, userdata, message):
+    decoded = message.payload.decode()  
+    if message.topic == "ledStatus":
+        data["ledStatus"]= decoded
+    elif message.topic == "doorStatus":
+        data["doorStatus"]= decoded
+    for x, y in data.items():
+        print(x, y)
+
+
+@mqtt.on_log()
+def handle_logging(client, userdata, level, buf):
+    print(level, buf)
+
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
